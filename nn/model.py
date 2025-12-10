@@ -1,10 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-'''
-My own developed Neural network which takes user input for learning rate and batch size. I chose to 
-use BCE aka Binary Cross Entropy loss function, as my endgoal is to integrate this into my nba prediction
-pipeline, where I predict between 0 and 1(0 for home loss, 1 for home win).
-'''
+
+from .losses import bce_loss
+from .activations import sigmoid, relu, drelu
+from .metrics import evaluate
+
 class NeuralNetwork:
     """
     Simple fully-connected neural network with ReLU hidden layers
@@ -17,53 +17,45 @@ class NeuralNetwork:
         self.batch_size = batch_size
 
         
-        weights_arr = [] # First only an empty vector, but we append weight matrices, one for each layer
+        weights = [] # First only an empty vector, but we append weight matrices, one for each layer
 
         #Initialize the weights as random for each weight of every layer
         for i in range(1,len(layers)-1):
-            weights_arr.append(np.random.randn(layers[i],layers[i-1]) * np.sqrt(2/(layers[i-1])))
+            weights.append(np.random.randn(layers[i],layers[i-1]) * np.sqrt(2/(layers[i-1])))
         last = len(layers) - 1
-        weights_arr.append(np.random.randn(layers[last],layers[last-1]) * np.sqrt(1/(layers[last-1])))
-        self.weights_arr = weights_arr
+        weights.append(np.random.randn(layers[last],layers[last-1]) * np.sqrt(1/(layers[last-1])))
+        self.weights = weights
 
         #Initialize biases as column for every layer, except input layer
         biases = [np.zeros(layers[layer]).reshape(-1, 1) for layer in range(1, len(layers))]
         self.biases = biases
 
-    # Sigmoid functions for output layer
-    def sigmoid(self, x): 
-        return (1/(1 + np.exp(-x))) 
-    
-    def dsigmoid(self, a):
-        return a * (1 - a)
 
-    # Relu functions for hidden layers
-    def relu(self, x): 
-        return np.maximum(0, x)
-    
-    def drelu(self, a): 
-        return (a > 0).astype(float)
 
+    # Forward propagation
     def forward_prop(self, x):
-        activations = []
+        activations = [x]
         z = []
-        activations.append(x)
-        weights_arr = self.weights_arr
-        biases = self.biases
-        for i in range(len(weights_arr)-1):
 
-            z.append(np.dot(weights_arr[i], activations[i]) +  biases[i]) # Make so that the biases is added into columns of x
-            activations.append(self.relu(z[i]))
+        weights = self.weights
+        biases = self.biases
+
+        for i in range(len(weights)-1):
+            z.append(np.dot(weights[i], activations[i]) +  biases[i]) # Make so that the biases is added into columns of x
+            activations.append(relu(z[i]))
+
         # Use sigmoid for output layer
-        last = len(weights_arr) - 1
-        z.append(np.dot(weights_arr[last], activations[last]) +  biases[last]) 
-        activations.append(self.sigmoid(z[last]))
+        last = len(weights) - 1
+        z.append(np.dot(weights[last], activations[last]) +  biases[last]) 
+        activations.append(sigmoid(z[last]))
         self.activations = activations
         self.z = z
 
+
+    # Back propagation
     def back_prop(self, y):
         activations = self.activations
-        weights_arr = self.weights_arr
+        weights = self.weights
         z = self.z
         L = len(self.layers)
         dz = [None] * L
@@ -77,16 +69,18 @@ class NeuralNetwork:
 
         # Backprop through hidden layers
         for i in reversed(range(1, L-1)):
-            dz[i] = np.dot(weights_arr[i].T, dz[i+1]) * self.drelu(z[i-1])
+            dz[i] = np.dot(weights[i].T, dz[i+1]) * drelu(z[i-1])
             dw[i] = np.dot(dz[i], activations[i-1].T)/self.batch_size
             db[i] = np.sum(dz[i], axis=1, keepdims=True) / self.batch_size
         biases = self.biases
-        weights_arr = self.weights_arr
+        weights = self.weights
 
         # Make the change of the amount gradient times lr
         for i in range(1, L):
-            self.weights_arr[i-1] -= self.lr * dw[i]
+            self.weights[i-1] -= self.lr * dw[i]
             self.biases[i-1] -= self.lr * db[i]
+
+
 
     # Fitting
     def fit(self, X, Y, epochs=100):
@@ -109,21 +103,27 @@ class NeuralNetwork:
                 batch = slice(start, end)
                 self.forward_prop(X_shuffled[batch].T)
                 self.back_prop(Y_shuffled[batch].T)
+
             self.forward_prop(X.T)
+            y_pred = self.activations[-1]      # final output layer
 
-            activations = self.activations[-1]              # final output layer
-            eps = 1e-8                                   # gives nan when log(0), so use small number
-            a = np.clip(activations, eps, 1 - eps)
-
-            loss = -1/samples * np.sum(Y.T*np.log(a) + (1-Y.T)*np.log(1-a))
+            loss = bce_loss(Y.T, y_pred)
             losses.append(loss)
-            accuracy = np.mean((a>= 0.5).astype(int) == Y.T)
-            print(f"Epoch[{i}]: BCE Loss {loss}, Accuracy {accuracy}")
 
-        plt.plot(losses)
-        plt.xlabel("EPOCHS")
-        plt.ylabel("Loss value")
+            accuracy = np.mean((y_pred>= 0.5).astype(int) == Y.T)
+            print(f"Epoch[{i}]: BCE Loss {loss}, Accuracy {accuracy}")
+        
+        # Lets show the final metrics
+        self.forward_prop(X.T)
+        y_pred = self.activations[-1] 
+
+        y_pred_labels = (y_pred >= 0.5).astype(int).flatten()
+        y_true_labels = Y.flatten()
+
+        evaluate(y_pred_labels, y_true_labels)
+       
     
+
 
     # Make prediction
     def predict(self, X):
