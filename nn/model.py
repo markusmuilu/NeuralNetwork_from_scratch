@@ -110,17 +110,9 @@ class NeuralNetwork:
             loss = bce_loss(Y.T, y_pred)
             losses.append(loss)
 
-            accuracy = np.mean((y_pred>= 0.5).astype(int) == Y.T)
-            print(f"Epoch[{i}]: BCE Loss {loss}, Accuracy {accuracy}")
         
-        # Lets show the final metrics
-        self.forward_prop(X.T)
-        y_pred = self.activations[-1] 
-
-        y_pred_labels = (y_pred >= 0.5).astype(int).flatten()
-        y_true_labels = Y.flatten()
-
-        evaluate(y_pred_labels, y_true_labels)
+        # Lets print final loss
+        print(f"Final loss {losses[-1]}")
        
     
 
