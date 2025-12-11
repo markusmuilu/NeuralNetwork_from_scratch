@@ -1,0 +1,16 @@
+[project]
+name = "nn"
+version = "1.0.0"
+description = "Custom neural network built from scratch in NumPy."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "matplotlib",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
